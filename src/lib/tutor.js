@@ -12,8 +12,73 @@ function isOffline() {
   return typeof navigator !== "undefined" && !navigator.onLine;
 }
 
+/** Answer simple, well-defined arithmetic questions directly, without needing an LLM. */
+function tryCompute(question) {
+  const q = question.toLowerCase().trim();
+
+  let m = q.match(/(?:square\s*root\s*of|sqrt\(?)\s*(-?\d+(?:\.\d+)?)\)?/) || q.match(/√\s*(-?\d+(?:\.\d+)?)/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    if (n < 0) return `The square root of a negative number (${n}) isn't a real number at GCSE level.`;
+    const r = Math.round(Math.sqrt(n) * 1000) / 1000;
+    return `√${n} = ${r}${Number.isInteger(r) ? "" : " (to 3 d.p.)"}`;
+  }
+
+  m = q.match(/cube\s*root\s*of\s*(-?\d+(?:\.\d+)?)/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    const r = Math.round(Math.cbrt(n) * 1000) / 1000;
+    return `Cube root of ${n} = ${r}${Number.isInteger(r) ? "" : " (to 3 d.p.)"}`;
+  }
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*squared/) || q.match(/(-?\d+(?:\.\d+)?)\s*\^\s*2\b/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    return `${n}² = ${n * n}`;
+  }
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*cubed/) || q.match(/(-?\d+(?:\.\d+)?)\s*\^\s*3\b/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    return `${n}³ = ${n ** 3}`;
+  }
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*(?:to the power of|\^)\s*(-?\d+(?:\.\d+)?)/);
+  if (m) {
+    const base = parseFloat(m[1]);
+    const exp = parseFloat(m[2]);
+    return `${base}^${exp} = ${Math.round(base ** exp * 1e6) / 1e6}`;
+  }
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*%\s*of\s*(-?\d+(?:\.\d+)?)/);
+  if (m) {
+    const pct = parseFloat(m[1]);
+    const of = parseFloat(m[2]);
+    return `${pct}% of ${of} = ${Math.round(((pct / 100) * of) * 1e6) / 1e6}`;
+  }
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*([+\-x×*÷/])\s*(-?\d+(?:\.\d+)?)/);
+  if (m) {
+    const a = parseFloat(m[1]);
+    const op = m[2];
+    const b = parseFloat(m[3]);
+    if ((op === "÷" || op === "/") && b === 0) return "You can't divide by zero.";
+    const result =
+      op === "+" ? a + b :
+      op === "-" ? a - b :
+      op === "x" || op === "×" || op === "*" ? a * b :
+      a / b;
+    return `${a} ${op} ${b} = ${Math.round(result * 1e6) / 1e6}`;
+  }
+
+  return null;
+}
+
 /** Rule-based fallback when no LLM API key is configured. */
 function mockAnswer(question, topic, tier) {
+  const computed = tryCompute(question);
+  if (computed) return computed;
+
   const q = question.toLowerCase();
 
   if (/^(hi|hello|hey)\b/.test(q) || q.length < 4) {

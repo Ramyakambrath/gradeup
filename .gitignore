@@ -3,3 +3,4 @@ dist/
 src.backup-*/
 .DS_Store
 *.log
+.claude/
