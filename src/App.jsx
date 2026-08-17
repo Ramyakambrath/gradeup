@@ -84,6 +84,30 @@ function BotAvatar({ size = 32, thinking = false }) {
   );
 }
 
+const SYMBOLS = ["√", "²", "³", "°", "π", "×", "÷", "±", "≤", "≥"];
+
+/** Row of maths symbol buttons — inserts the tapped symbol via onInsert. Handy on-screen keyboards (e.g. iPad) don't expose these. */
+function SymbolRow({ onInsert, dark = false }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {SYMBOLS.map((sym) => (
+        <button
+          key={sym}
+          type="button"
+          onClick={() => onInsert(sym)}
+          className={`w-7 h-7 rounded-lg text-sm font-medium shrink-0 ${
+            dark
+              ? "bg-white/10 border border-white/20 text-gray-300 hover:bg-white/20 hover:text-white"
+              : "bg-gray-50 border border-gray-200 text-gray-600 hover:bg-white hover:border-gray-300 hover:text-gray-900"
+          }`}
+        >
+          {sym}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const STRAND_TIPS = {
   Number: "Practise converting between fractions, decimals and percentages until it's automatic — most Number slip-ups come from misreading place value.",
   Algebra: "Rewrite the equation one line at a time and say out loud what you're doing to both sides — most Algebra errors are sign errors, not method errors.",
@@ -879,6 +903,7 @@ export default function App() {
                 </div>
               )}
             </div>
+            <SymbolRow onInsert={(sym) => setTutorInput((v) => v + sym)} />
             <div className="flex gap-2 mt-2">
               <input
                 value={tutorInput}
@@ -938,6 +963,7 @@ export default function App() {
               </div>
             )}
           </div>
+          <SymbolRow dark onInsert={(sym) => setAgentInput((v) => v + sym)} />
           <div className="flex gap-2 mt-2">
             <input
               value={agentInput}
@@ -1042,6 +1068,7 @@ export default function App() {
                   placeholder="Question text…"
                   className="w-full h-20 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-gray-400"
                 />
+                <SymbolRow onInsert={(sym) => setAddQText((v) => v + sym)} />
                 <input
                   value={addQAnswer}
                   onChange={(e) => setAddQAnswer(e.target.value)}
@@ -1124,6 +1151,9 @@ export default function App() {
               placeholder="Your answer…"
               className="mt-4 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gray-400"
             />
+            <div className="mt-2">
+              <SymbolRow onInsert={(sym) => setAnswers({ ...answers, [q.id]: (answers[q.id] || "") + sym })} />
+            </div>
           </div>
           <div className="flex gap-2">
             {qIndex > 0 && (
@@ -1570,6 +1600,7 @@ export default function App() {
               </button>
             ))}
           </div>
+          <SymbolRow onInsert={(sym) => insertFormatting(sym, "")} />
           <textarea
             ref={noteTextareaRef}
             value={noteText}
