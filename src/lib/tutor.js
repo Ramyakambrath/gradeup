@@ -12,11 +12,122 @@ function isOffline() {
   return typeof navigator !== "undefined" && !navigator.onLine;
 }
 
+/** Safely evaluate a plain arithmetic expression (+ - × ÷ and parentheses only — no eval/Function). Returns null if it can't be parsed. */
+function evalExpr(expr) {
+  const s = expr.replace(/\s+/g, "").replace(/[x×]/g, "*").replace(/÷/g, "/");
+  let i = 0;
+
+  function parseNumber() {
+    const start = i;
+    if (s[i] === "-") i++;
+    while (i < s.length && /[\d.]/.test(s[i])) i++;
+    if (i === start || (i === start + 1 && s[start] === "-")) return null;
+    return parseFloat(s.slice(start, i));
+  }
+  function parseFactor() {
+    if (s[i] === "(") {
+      i++;
+      const v = parseExpr();
+      if (s[i] !== ")") return null;
+      i++;
+      return v;
+    }
+    return parseNumber();
+  }
+  function parseTerm() {
+    let v = parseFactor();
+    if (v === null) return null;
+    while (s[i] === "*" || s[i] === "/") {
+      const op = s[i];
+      i++;
+      const rhs = parseFactor();
+      if (rhs === null) return null;
+      if (op === "/" && rhs === 0) return null;
+      v = op === "*" ? v * rhs : v / rhs;
+    }
+    return v;
+  }
+  function parseExpr() {
+    let v = parseTerm();
+    if (v === null) return null;
+    while (s[i] === "+" || s[i] === "-") {
+      const op = s[i];
+      i++;
+      const rhs = parseTerm();
+      if (rhs === null) return null;
+      v = op === "+" ? v + rhs : v - rhs;
+    }
+    return v;
+  }
+
+  if (!s) return null;
+  const result = parseExpr();
+  if (i !== s.length || result === null || Number.isNaN(result)) return null;
+  return result;
+}
+
+const SUPERSCRIPT_DIGITS = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9" };
+
+function formatPower(base, exp) {
+  const b = parseFloat(base);
+  const e = parseFloat(exp);
+  const result = Math.round(b ** e * 1e6) / 1e6;
+  const display = e === 2 ? "²" : e === 3 ? "³" : `^${exp}`;
+  return `${b}${display} = ${result}`;
+}
+
+/** Any way of expressing "N to the power of M": "N squared/cubed", superscript digits (N², N⁴...), N^M, or "N to the power of M". */
+function tryPower(q) {
+  let m = q.match(/(-?\d+(?:\.\d+)?)\s*squared/);
+  if (m) return formatPower(m[1], 2);
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*cubed/);
+  if (m) return formatPower(m[1], 3);
+
+  m = q.match(/(-?\d+(?:\.\d+)?)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/);
+  if (m) {
+    const expStr = m[2].split("").map((ch) => SUPERSCRIPT_DIGITS[ch]).join("");
+    return formatPower(m[1], expStr);
+  }
+
+  m = q.match(/(-?\d+(?:\.\d+)?)\s*(?:to the power of|\^)\s*(-?\d+(?:\.\d+)?)/);
+  if (m) return formatPower(m[1], m[2]);
+
+  return null;
+}
+
+/** Find the substring inside the parentheses starting at openIdx (which must point at "("), respecting nesting. */
+function findParenExpr(str, openIdx) {
+  let depth = 0;
+  for (let j = openIdx; j < str.length; j++) {
+    if (str[j] === "(") depth++;
+    else if (str[j] === ")") {
+      depth--;
+      if (depth === 0) return str.slice(openIdx + 1, j);
+    }
+  }
+  return null;
+}
+
 /** Answer simple, well-defined arithmetic questions directly, without needing an LLM. */
 function tryCompute(question) {
   const q = question.toLowerCase().trim();
 
-  let m = q.match(/(?:square\s*root\s*of|sqrt\(?)\s*(-?\d+(?:\.\d+)?)\)?/) || q.match(/√\s*(-?\d+(?:\.\d+)?)/);
+  // √(...) or sqrt(...), where "..." can be any arithmetic expression, e.g. √(5+4)
+  const rootOpen = q.search(/(?:sqrt|√)\s*\(/);
+  if (rootOpen !== -1) {
+    const openIdx = q.indexOf("(", rootOpen);
+    const inner = findParenExpr(q, openIdx);
+    const val = inner !== null ? evalExpr(inner) : null;
+    if (val !== null) {
+      if (val < 0) return `The square root of a negative number (${val}) isn't a real number at GCSE level.`;
+      const r = Math.round(Math.sqrt(val) * 1000) / 1000;
+      return `√(${inner.trim()}) = ${r}${Number.isInteger(r) ? "" : " (to 3 d.p.)"}`;
+    }
+  }
+
+  // Bare form without parentheses, e.g. "square root of 64" or "√64"
+  let m = q.match(/(?:square\s*root\s*of|sqrt)\s*(-?\d+(?:\.\d+)?)/) || q.match(/√\s*(-?\d+(?:\.\d+)?)/);
   if (m) {
     const n = parseFloat(m[1]);
     if (n < 0) return `The square root of a negative number (${n}) isn't a real number at GCSE level.`;
@@ -24,6 +135,17 @@ function tryCompute(question) {
     return `√${n} = ${r}${Number.isInteger(r) ? "" : " (to 3 d.p.)"}`;
   }
 
+  // Cube root, with or without parentheses
+  const cbrtOpen = q.search(/cube\s*root\s*of\s*\(/);
+  if (cbrtOpen !== -1) {
+    const openIdx = q.indexOf("(", cbrtOpen);
+    const inner = findParenExpr(q, openIdx);
+    const val = inner !== null ? evalExpr(inner) : null;
+    if (val !== null) {
+      const r = Math.round(Math.cbrt(val) * 1000) / 1000;
+      return `Cube root of (${inner.trim()}) = ${r}${Number.isInteger(r) ? "" : " (to 3 d.p.)"}`;
+    }
+  }
   m = q.match(/cube\s*root\s*of\s*(-?\d+(?:\.\d+)?)/);
   if (m) {
     const n = parseFloat(m[1]);
@@ -31,24 +153,9 @@ function tryCompute(question) {
     return `Cube root of ${n} = ${r}${Number.isInteger(r) ? "" : " (to 3 d.p.)"}`;
   }
 
-  m = q.match(/(-?\d+(?:\.\d+)?)\s*squared/) || q.match(/(-?\d+(?:\.\d+)?)\s*\^\s*2\b/);
-  if (m) {
-    const n = parseFloat(m[1]);
-    return `${n}² = ${n * n}`;
-  }
-
-  m = q.match(/(-?\d+(?:\.\d+)?)\s*cubed/) || q.match(/(-?\d+(?:\.\d+)?)\s*\^\s*3\b/);
-  if (m) {
-    const n = parseFloat(m[1]);
-    return `${n}³ = ${n ** 3}`;
-  }
-
-  m = q.match(/(-?\d+(?:\.\d+)?)\s*(?:to the power of|\^)\s*(-?\d+(?:\.\d+)?)/);
-  if (m) {
-    const base = parseFloat(m[1]);
-    const exp = parseFloat(m[2]);
-    return `${base}^${exp} = ${Math.round(base ** exp * 1e6) / 1e6}`;
-  }
+  // Any power — "N squared/cubed", superscript digits (N², N⁴...), N^M, or "N to the power of M"
+  const power = tryPower(q);
+  if (power) return power;
 
   m = q.match(/(-?\d+(?:\.\d+)?)\s*%\s*of\s*(-?\d+(?:\.\d+)?)/);
   if (m) {

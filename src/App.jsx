@@ -84,7 +84,7 @@ function BotAvatar({ size = 32, thinking = false }) {
   );
 }
 
-const SYMBOLS = ["√", "²", "³", "°", "π", "×", "÷", "±", "≤", "≥"];
+const SYMBOLS = ["√(", "²", "³", "^", "°", "π", "×", "÷", "±", "≤", "≥"];
 
 /** Row of maths symbol buttons — inserts the tapped symbol via onInsert. Handy on-screen keyboards (e.g. iPad) don't expose these. */
 function SymbolRow({ onInsert, dark = false }) {
